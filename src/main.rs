@@ -7,9 +7,13 @@ use auth::BasicAuth;
 
 use rocket::response::status;
 use rocket::serde::json::{json, Value}; // this json macros converts data to json file
+use rocket_sync_db_pools::database;
+
+#[database("sqlite")]
+struct DbConn(diesel::SqliteConnection);
 
 #[get("/rustaceans")]
-fn get_rustaceans(_auth: BasicAuth) -> Value {
+fn get_rustaceans(_auth: BasicAuth, _db: DbConn) -> Value {
     json!([{"id": 1, "name":"John Doe"}, {"id" : 2, "name":"John Doe again"}])
 }
 
@@ -52,6 +56,7 @@ async fn main() {
             ],
         )
         .register("/", catchers![not_found])
+        .attach(DbConn::fairing())
         .launch()
         .await;
 }
