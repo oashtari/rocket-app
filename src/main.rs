@@ -31,8 +31,15 @@ async fn get_rustaceans(_auth: BasicAuth, db: DbConn) -> Value {
 }
 
 #[get("/rustaceans/<id>")]
-fn view_rustacean(id: i32, _auth: BasicAuth) -> Value {
-    json!({"id": id, "name":"John Doe", "email":"john@doe.com"})
+async fn view_rustacean(id: i32, _auth: BasicAuth, db: DbConn) -> Value {
+    db.run(move |c| {
+        let rustacean = rustaceans::table
+            .find(id)
+            .get_result::<Rustacean>(c)
+            .expect("DB error when selecting rustacean");
+        json!(rustacean)
+    })
+    .await
 }
 
 #[post("/rustaceans", format = "json", data = "<new_rustacean>")]
@@ -51,14 +58,36 @@ async fn create_rustacean(
     .await
 }
 
-#[put("/rustaceans/<id>", format = "json")]
-fn update_rustacean(id: i32, _auth: BasicAuth) -> Value {
-    json!({"id": id, "name" : "Jon Doe", "email":"John@dow.com"})
+#[put("/rustaceans/<id>", format = "json", data = "<rustacean>")]
+async fn update_rustacean(
+    id: i32,
+    _auth: BasicAuth,
+    db: DbConn,
+    rustacean: Json<Rustacean>,
+) -> Value {
+    db.run(move |c| {
+        let result = diesel::update(rustaceans::table.find(id))
+            .set((
+                rustaceans::name.eq(rustacean.name.to_owned()),
+                rustaceans::email.eq(rustacean.email.to_owned()),
+            ))
+            .execute(c)
+            .expect("DB error when updating.");
+        json!(result)
+    })
+    .await
 }
 
-#[delete("/rustaceans/<_id>")]
-fn delete_rustacean(_id: i32, _auth: BasicAuth) -> status::NoContent {
-    status::NoContent
+#[delete("/rustaceans/<id>")]
+async fn delete_rustacean(id: i32, _auth: BasicAuth, db: DbConn) -> status::NoContent {
+    db.run(move |c| {
+        // let result =
+        diesel::delete(rustaceans::table.find(id))
+            .execute(c)
+            .expect("DB error looking for rustacean to delete");
+        status::NoContent
+    })
+    .await
 }
 
 #[catch(404)]
