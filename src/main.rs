@@ -12,9 +12,11 @@ use diesel::prelude::*;
 use diesel::result::Error::NotFound;
 use models::{NewRustacean, Rustacean};
 use repositories::RustaceanRepository;
+use rocket::fairing::AdHoc;
 use rocket::http::Status;
 use rocket::response::status;
 use rocket::serde::json::{json, Json, Value}; // this json macros converts data to json file
+use rocket::{Build, Rocket};
 use rocket_sync_db_pools::database;
 use schema::rustaceans;
 
@@ -133,6 +135,21 @@ async fn delete_rustacean(
     .await
 }
 
+async fn run_db_migrations(rocket: Rocket<Build>) -> Rocket<Build> {
+    use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+
+    const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
+
+    DbConn::get_one(&rocket)
+        .await
+        .expect("Unable to retrive connection.")
+        .run(|c| {
+            c.run_pending_migrations(MIGRATIONS)
+                .expect("Migrations failed.");
+        })
+        .await;
+    rocket
+}
 #[catch(404)]
 fn not_found() -> Value {
     json!("Not found!")
@@ -153,6 +170,7 @@ async fn main() {
         )
         .register("/", catchers![not_found])
         .attach(DbConn::fairing())
+        .attach(AdHoc::on_ignite("Diesel Migrations", run_db_migrations))
         .launch()
         .await;
 }
